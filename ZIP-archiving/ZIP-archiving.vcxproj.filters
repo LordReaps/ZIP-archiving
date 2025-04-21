@@ -19,4 +19,12 @@
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="sample.txt">
+      <Filter>Исходные файлы</Filter>
+    </Text>
+    <Text Include="zip.txt">
+      <Filter>Исходные файлы</Filter>
+    </Text>
+  </ItemGroup>
 </Project>
