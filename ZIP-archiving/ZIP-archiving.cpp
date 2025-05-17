@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <utility>
+#include <cstdlib>
 using namespace std;
 
 struct Node {
@@ -115,6 +116,116 @@ struct Node* CreateHuffmanTree(char arr[], int freq[],
     }
 
     return extractMinFrom_Heap(Heap);
+}
+
+typedef struct code {
+    char k;
+    int l;
+    int code_arr[16];
+    struct code* p;
+} code;
+
+typedef struct Tree {
+    char g;
+    int len;
+    int dec;
+    struct Tree* f;
+    struct Tree* r;
+} Tree;
+
+bool isLeaf(Node* node) {
+    return (node->l == nullptr && node->r == nullptr);
+}
+
+code* front = nullptr;
+code* rear = nullptr;
+int k = 0;
+
+//Преобразует бинарный код (массив 0 и 1) в десятичное число.
+int convertBinaryToDecimal(int binary[], int length) {
+    int decimal = 0;
+    for (int i = 0; i < length; i++) {
+        decimal = (decimal << 1) | binary[i]; // Эквивалентно decimal = decimal * 2 + binary[i]
+    }
+    return decimal;
+}
+
+//Рекурсивная функция для создания спрессованного файла
+void printCodeIntoFile(ofstream& file, Node* root, int t[], int top = 0) {
+    int i;
+    if (root->l) {
+        t[top] = 0;
+        printCodeIntoFile(file, root->l, t, top + 1);
+    }
+    if (root->r) {
+        t[top] = 1;
+        printCodeIntoFile(file, root->r, t, top + 1);
+    }
+    if (isLeaf(root)) {
+        code* data = (code*)malloc(sizeof(code));
+        Tree* tree = (Tree*)malloc(sizeof(Tree));
+        data->p = NULL;
+        data->k = root->letter;
+        tree->g = root->letter;
+        file.write(&tree->g, sizeof(char));
+
+        for (i = 0; i < top; i++) {
+            data->code_arr[i] = t[i];
+        }
+
+        tree->len = top;
+        file.write(reinterpret_cast<char*>(&tree->len), sizeof(int));
+        
+        tree->dec = convertBinaryToDecimal(data->code_arr, top);
+        file.write(reinterpret_cast<char*>(&tree->dec), sizeof(int));
+        data->l = top;
+        data->p = NULL;
+        if (k == 0) {
+            front = rear = data;
+            k++;
+        }
+        else {
+            rear->p = data;
+            rear = rear->p;
+        }
+    }
+}
+
+// Функция для сжатия файла
+void compressFile(ifstream& input, ofstream& output, code* front) {
+    unsigned char a = 0;
+    int h = 0;  // Счетчик битов в текущем байте (0-7)
+
+    char n;
+    while (input.get(n)) {
+        code* rear = front;
+        // Ищем символ в списке кодов
+        while (rear != nullptr && rear->k != n) {
+            rear = rear->p;
+        }
+
+        if (rear != nullptr && rear->k == n) {
+            // Записываем биты кода
+            for (int i = 0; i < rear->l; ++i) {
+                if (h < 7) {
+                    a = (a << 1) | rear->code_arr[i];
+                    h++;
+                }
+                else {
+                    a = (a << 1) | rear->code_arr[i];
+                    output.put(a);
+                    a = 0;
+                    h = 0;
+                }
+            }
+        }
+    }
+
+    // Дописываем оставшиеся биты
+    if (h > 0) {
+        a <<= (7 - h);
+        output.put(a);
+    }
 }
 
 int main()
