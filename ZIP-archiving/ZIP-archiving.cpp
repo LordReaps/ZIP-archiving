@@ -8,6 +8,7 @@
 #include <memory>
 #include <bitset>
 #include <sys/stat.h> // Для получения размера файла
+#include <chrono> // Для измерения времени
 
 using namespace std;
 
@@ -346,7 +347,7 @@ int main()
     SetConsoleOutputCP(1251);
 
     // 1. Чтение исходного файла
-    string inputFilename = "sample2.txt";
+    string inputFilename = "test2.txt";
     string compressedFilename = "zip.bin";
     string decompressedFilename = "unzipped.txt";
     string codesFilename = "codes.bin";
@@ -411,7 +412,14 @@ int main()
         return 1;
     }
 
+    // --- Измерение времени кодирования ---
+    auto start_compress = std::chrono::high_resolution_clock::now();
     compressFile(input, compressed, front);
+    auto end_compress = std::chrono::high_resolution_clock::now();
+    auto duration_compress = std::chrono::duration_cast<std::chrono::milliseconds>(end_compress - start_compress);
+    cout << "Время кодирования: " << duration_compress.count() << " мс" << endl;
+    // --- Конец измерения времени кодирования ---
+
     input.close();
     compressed.close();
 
@@ -434,13 +442,20 @@ int main()
     ReBuildHuffmanTree(codeInput, uniqueCount);
     codeInput.close();
 
+
     // Распаковка файла
+    // --- Измерение времени декодирования ---
+    auto start_decompress = std::chrono::high_resolution_clock::now();
     decompressFile(compressedInput, decompressed, text.length());
     compressedInput.close();
     decompressed.close();
 
     // Получаем размер распакованного файла
     long decompressedSize = getFileSize(decompressedFilename);
+    auto end_decompress = std::chrono::high_resolution_clock::now();
+    auto duration_decompress = std::chrono::duration_cast<std::chrono::milliseconds>(end_decompress - start_decompress);
+    cout << "Время декодирования: " << duration_decompress.count() << " мс" << endl;
+    // --- Конец измерения времени декодирования ---
     cout << "Размер распакованного файла: " << decompressedSize << " байт" << endl;
 
     // Проверка целостности данных
