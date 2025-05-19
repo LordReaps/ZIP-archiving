@@ -130,8 +130,10 @@
     <ClCompile Include="ZIP-archiving.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="sample.txt" />
-    <Text Include="zip.txt" />
+    <Text Include="..\..\..\..\Users\boven\Downloads\test1.txt" />
+    <Text Include="..\..\..\..\Users\boven\Downloads\test2.txt" />
+    <Text Include="..\..\..\..\Users\boven\Downloads\test3.txt" />
+    <Text Include="..\..\..\..\Users\boven\Downloads\test4.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
