@@ -5,7 +5,17 @@
 #include <vector>
 #include <utility>
 #include <cstdlib>
+#include <memory>
+#include <bitset>
+#include <sys/stat.h> // Для получения размера файла
+
 using namespace std;
+
+long getFileSize(const string& filename) {
+    struct stat stat_buf;
+    int rc = stat(filename.c_str(), &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
+}
 
 struct Node {
     char letter;
@@ -18,7 +28,6 @@ struct Node {
         l(nullptr),
         r(nullptr){}
 };
-
 
 //структура минимальной кучи
 struct Min_Stack{
@@ -131,6 +140,9 @@ typedef struct Tree {
     int dec;
     struct Tree* f;
     struct Tree* r;
+    bool isLeaf() const {
+        return (f == nullptr) && (r == nullptr);
+    }
 } Tree;
 
 bool isLeaf(Node* node) {
@@ -228,39 +240,216 @@ void compressFile(ifstream& input, ofstream& output, code* front) {
     }
 }
 
+constexpr int MAX = 256; // Максимальная длина кода
+
+// Глобальные переменные (лучше избегать, но оставим как в оригинале)
+std::unique_ptr<Tree> tree;    // Корень дерева
+Tree* tree_temp = nullptr;     // Временный указатель для построения дерева
+std::unique_ptr<Tree> t;       // Временное хранилище для считанных данных
+
+// Функция для извлечения кодов из файла
+void ExtractCodesFromFile(std::ifstream& input) {
+    input.read(&t->g, sizeof(char));
+    input.read(reinterpret_cast<char*>(&t->len), sizeof(int));
+    input.read(reinterpret_cast<char*>(&t->dec), sizeof(int));
+}
+
+// Функция преобразования десятичного числа в бинарный массив
+void convertDecimalToBinary(int bin[], int decimal, int length) {
+    for (int i = length - 1; i >= 0; --i) {
+        bin[i] = decimal % 2;
+        decimal /= 2;
+    }
+}
+
+// Функция восстановления дерева Хаффмана
+void ReBuildHuffmanTree(ifstream& input, int size) {
+    tree = std::make_unique<Tree>();
+    tree_temp = tree.get();
+    t = std::make_unique<Tree>();
+
+    for (int k = 0; k < size; ++k) {
+        tree_temp = tree.get();
+        ExtractCodesFromFile(input);
+
+        int bin[MAX] = { 0 };
+        int bin_con[MAX] = { 0 };
+        convertDecimalToBinary(bin, t->dec, t->len);
+
+        // Копируем только значимые биты
+        std::copy(bin, bin + t->len, bin_con);
+
+        // Восстанавливаем путь в дереве
+        for (int j = 0; j < t->len; ++j) {
+            if (bin_con[j] == 0) {
+                if (!tree_temp->f) {
+                    tree_temp->f = new Tree();
+                    tree_temp->f->f = nullptr;
+                    tree_temp->f->r = nullptr;
+                }
+                tree_temp = tree_temp->f;
+            }
+            else {
+                if (!tree_temp->r) {
+                    tree_temp->r = new Tree();
+                    tree_temp->r->f = nullptr;
+                    tree_temp->r->r = nullptr;
+                }
+                tree_temp = tree_temp->r;
+            }
+        }
+
+        // Сохраняем данные в конечном узле
+        tree_temp->g = t->g;
+        tree_temp->len = t->len;
+        tree_temp->dec = t->dec;
+    }
+}
+
+void decompressFile(ifstream& input, ofstream& output, int originalSize) {
+    std::bitset<8> bits;
+    Tree* current = tree.get(); // Предполагаем, что tree - корень (уже построен)
+
+    input.read(reinterpret_cast<char*>(&bits), sizeof(char));
+    int bitsPos = 0;
+    int decodedCount = 0;
+
+    while (decodedCount < originalSize) {
+        if (current->isLeaf()) {
+            output.put(current->g);
+            current = tree.get();
+            decodedCount++;
+            continue;
+        }
+
+        // Получаем следующий бит
+        bool bit = bits[7 - bitsPos]; // Биты хранятся старшим вперед
+        bitsPos++;
+
+        // Переходим по дереву
+        current = bit ? current->r : current->f;
+
+        // Если обработали все 8 бит, читаем следующий байт
+        if (bitsPos >= 8) {
+            if (!input.read(reinterpret_cast<char*>(&bits), sizeof(char))) {
+                break; // Конец файла
+            }
+            bitsPos = 0;
+        }
+    }
+}
+
+
 int main()
 {
     SetConsoleCP(1251);
     SetConsoleOutputCP(1251);
 
-    //Открытие файла на чтение исходного текста
-    ifstream in("sample.txt");
+    // 1. Чтение исходного файла
+    string inputFilename = "sample2.txt";
+    string compressedFilename = "zip.bin";
+    string decompressedFilename = "unzipped.txt";
+    string codesFilename = "codes.bin";
 
+    ifstream in(inputFilename);
     if (!in.is_open()) {
         cerr << "Не удалось открыть файл для чтения!" << endl;
         return 1;
     }
 
-    //Чтение всего файла в строку
-    //C++17 позволяет легко прочитать все, даже спец-символы
-    string text((istreambuf_iterator<char>(in)),
-        istreambuf_iterator<char>());
-    
-    cout << text << endl;
+    string text((istreambuf_iterator<char>(in)), istreambuf_iterator<char>());
+    in.close();
 
-
-
-    //Открытие файла на запись закодированного текста
-
-    ofstream file("zip.txt");
-
-    if (!file.is_open()) {
-        cerr << "Не удалось открыть файл для записи!" << endl;
+    if (text.empty()) {
+        cerr << "Файл пуст!" << endl;
         return 1;
     }
 
-    in.close();
-    file.close();
+    // Получаем размер исходного файла
+    long originalSize = getFileSize(inputFilename);
+    cout << "Размер исходного файла: " << originalSize << " байт" << endl;
+
+    // 2. Подсчет частоты символов
+    int freq[256] = { 0 };
+    for (char c : text) {
+        freq[static_cast<unsigned char>(c)]++;
+    }
+
+    // 3. Подготовка уникальных символов и их частот
+    char uniqueChars[256];
+    int uniqueFreq[256];
+    int uniqueCount = 0;
+
+    for (int i = 0; i < 256; i++) {
+        if (freq[i] > 0) {
+            uniqueChars[uniqueCount] = static_cast<char>(i);
+            uniqueFreq[uniqueCount] = freq[i];
+            uniqueCount++;
+        }
+    }
+
+    // 4. Построение дерева Хаффмана
+    Min_Stack* minHeap = CreateMin_stack(uniqueChars, uniqueFreq, uniqueCount);
+    Node* huffmanTree = CreateHuffmanTree(uniqueChars, uniqueFreq, uniqueCount, minHeap);
+
+    // 5. Запись кодов в промежуточный файл
+    ofstream codeFile(codesFilename, ios::binary);
+    if (!codeFile.is_open()) {
+        cerr << "Не удалось создать файл кодов!" << endl;
+        return 1;
+    }
+
+    int arr[256];
+    printCodeIntoFile(codeFile, huffmanTree, arr);
+    codeFile.close();
+
+    // 6. Сжатие исходного файла
+    ifstream input(inputFilename);
+    ofstream compressed(compressedFilename, ios::binary);
+    if (!input || !compressed) {
+        cerr << "Ошибка открытия файлов для сжатия!" << endl;
+        return 1;
+    }
+
+    compressFile(input, compressed, front);
+    input.close();
+    compressed.close();
+
+    // Получаем размер сжатого файла
+    long compressedSize = getFileSize(compressedFilename);
+    cout << "Размер сжатого файла: " << compressedSize << " байт" << endl;
+    double compressionRatio = (1.0 - static_cast<double>(compressedSize) / originalSize) * 100.0;
+    cout << "Коэффициент сжатия: " << compressionRatio << "%" << endl;
+
+    // 7. Распаковка сжатого файла
+    ifstream compressedInput(compressedFilename, ios::binary);
+    ofstream decompressed(decompressedFilename);
+    if (!compressedInput || !decompressed) {
+        cerr << "Ошибка открытия файлов для распаковки!" << endl;
+        return 1;
+    }
+
+    // Восстановление дерева Хаффмана
+    ifstream codeInput(codesFilename, ios::binary);
+    ReBuildHuffmanTree(codeInput, uniqueCount);
+    codeInput.close();
+
+    // Распаковка файла
+    decompressFile(compressedInput, decompressed, text.length());
+    compressedInput.close();
+    decompressed.close();
+
+    // Получаем размер распакованного файла
+    long decompressedSize = getFileSize(decompressedFilename);
+    cout << "Размер распакованного файла: " << decompressedSize << " байт" << endl;
+
+    // Проверка целостности данных
+    if (originalSize == decompressedSize) {
+        cout << "Проверка целостности: данные совпадают" << endl;
+    }
+    else {
+        cout << "Проверка целостности: Внимание! Размеры не совпадают" << endl;
+    }
 
     return 0;
 }
